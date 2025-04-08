@@ -1,0 +1,103 @@
+name: Run RSpec with Parallel
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  ruby-ci-parallel:
+    if: ${{ inputs.active == true }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:10.3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test_db
+      redis:
+        image: redis:4
+        ports:
+          - 6379:6379
+    env:
+      CC_TEST_REPORTER_ID: ce4ea5c9c5e2bbb63b14d80c6656fc13a18a79f5cd16263242c9a7d09ed69802
+      RAILS_ENV: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 2.6.2
+          bundler-cache: true
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 12.22.12
+          
+      - name: Install Yarn
+        run: npm install --global yarn
+        
+      - name: Install Node.js dependencies
+        run: yarn install --check-files
+
+      - name: Install aapt and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aapt
+
+      - name: Install dependencies for aapt
+        run: |
+          sudo apt-get update
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install libc6-dev libstdc++6 zlib1g zlib1g-dev zlib1g:i386
+      
+      - name: Install Ruby dependencies
+        run: bundle install
+        
+      - name: Set up database configuration
+        run: |
+          cp config/database.yml.example config/database.yml
+          sed -i 's/username: .*/username: postgres/' config/database.yml
+          sed -i 's/password: .*/password: password/' config/database.yml
+          sed -i 's/host: .*/host: localhost/' config/database.yml
+          
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 1
+          done
+
+      - name: Setup Code Climate test-reporter
+        run: |
+          curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+          chmod +x ./cc-test-reporter
+
+      - name: Create and prepare database
+        run: |
+          RAILS_ENV=test bundle exec rails db:create
+
+      - name: Run Assets Precompile
+        run: RAILS_ENV=test bundle exec rails assets:precompile
+
+      - name: Run Parallel RSpec Tests
+        id: rspec
+        run: |
+          ./cc-test-reporter before-build
+           RAILS_ENV=test bundle exec rails parallel:drop parallel:create parallel:migrate parallel:spec
+          ./cc-test-reporter after-build --exit-code $?
+

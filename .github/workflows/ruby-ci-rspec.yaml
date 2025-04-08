@@ -1,0 +1,93 @@
+name: RSpec
+
+on:
+  workflow_call:
+    inputs:
+      ruby-version:
+        required: false
+        default: "2.6.2"
+        type: string
+      node-version:
+        required: false
+        default: "9.8.0"
+        type: string
+      so-version:
+        required: false
+        default: "ubuntu-20.04"
+        type: string
+      active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  ruby-ci-rspec:
+    if: ${{ inputs.active == true }}
+    name: RSpec
+    runs-on: ${{ inputs.so-version }}
+    services:
+      postgres:
+        image: postgres:14
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+      redis:
+        image: redis:4
+        ports:
+          - 6379:6379
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node-version }}
+          
+      - name: Install Yarn
+        run: npm install --global yarn
+        
+      - name: Install Node.js dependencies
+        run: yarn install --check-files
+
+      - name: Install container dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get install -y shared-mime-info
+          sudo apt-get install -y libpq-dev
+          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y aapt
+          sudo apt-get install -y dmg2img
+          sudo apt-get install -y libsodium-dev
+
+      - name: Install Ruby dependencies
+        run: bundle install
+        
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 1
+          done
+
+      - name: Build assets
+        run: bundle exec rails assets:precompile
+        
+      - name: Create and prepare database
+        run: RAILS_ENV=test bundle exec rails db:create db:migrate
+
+      - name: Run RSpec Tests
+        run: RAILS_ENV=test bundle exec rspec

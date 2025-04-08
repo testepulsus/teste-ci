@@ -1,0 +1,60 @@
+name: Ruby CI
+run-name: Ruby CI
+
+on:
+  workflow_call:
+    inputs:
+      ruby-version:
+        required: false
+        default: "2.6.2"
+        type: string
+      node-version:
+        required: false
+        default: "9.8.0"
+        type: string
+      so-version:
+        required: false
+        default: "ubuntu-20.04"
+        type: string
+      ruby-traceroute-active:
+        required: false
+        default: true
+        type: boolean
+      ruby-rspec-active:
+        required: false
+        default: true
+        type: boolean
+      ruby-rubocop-active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  ruby-ci-traceroute:
+    name: Ruby CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/ruby-ci-traceroute.yaml@master
+    with:
+      ruby-version: ${{ inputs.ruby-version }}
+      node-version: ${{ inputs.node-version }}
+      so-version: ${{ inputs.so-version }}
+      active: ${{ inputs.ruby-traceroute-active }}
+
+  ruby-ci-rspec:
+    name: Ruby CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/ruby-ci-rspec.yaml@master
+    with:
+      ruby-version: ${{ inputs.ruby-version }}
+      node-version: ${{ inputs.node-version }}
+      so-version: ${{ inputs.so-version }}
+      active: ${{ inputs.ruby-rspec-active }}
+
+  ruby-ci-rubocop:
+    name: Ruby CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/ruby-ci-rubocop.yaml@master
+    with:
+      ruby-version: ${{ inputs.ruby-version }}
+      node-version: ${{ inputs.node-version }}
+      so-version: ${{ inputs.so-version }}
+      active: ${{ inputs.ruby-rubocop-active }}
+
+

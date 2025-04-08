@@ -1,0 +1,51 @@
+name: Gitleaks Scan
+
+on:
+  workflow_call:
+    inputs:
+      active:
+        required: false
+        default: true
+        type: boolean
+
+    secrets:
+      GITLEAKS_LICENSE:
+        required: true
+
+jobs:
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.0/gitleaks_8.21.0_linux_x64.tar.gz | tar -xz
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          sudo chmod +x /usr/local/bin/gitleaks
+
+      - name: Run Gitleaks and generate JSON report
+        id: gitleaks
+        run: |
+          gitleaks detect --source . --verbose --log-opts="--all" --report-format=json --report-path=gitleaks-results.json --exit-code=1
+        continue-on-error: true
+
+      - name: Display Gitleaks JSON report
+        run: cat gitleaks-results.json
+
+      - name: Generate Gitleaks Markdown Summary
+        run: |
+          echo "## 🔴 Gitleaks detected secrets 🔴" >> $GITHUB_STEP_SUMMARY
+          echo "| Rule ID | Commit | Secret URL | Start Line | Author | Date | File |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- | --- | --- | --- | --- | --- |" >> $GITHUB_STEP_SUMMARY
+          cat gitleaks-results.json | jq -r '.[] | "| \(.RuleID) | [\(.Commit)](https://github.com/${{ github.repository }}/commit/\(.Commit)) | [View Secret](https://github.com/${{ github.repository }}/blob/\(.Commit)/\(.File)#L\(.StartLine)) | \(.StartLine) | \(.Author) | \(.Date) | \(.File) |"' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results.json
+          path: gitleaks-results.json

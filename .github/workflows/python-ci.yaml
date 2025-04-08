@@ -1,0 +1,81 @@
+name: Python CI
+run-name: Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+      python-pylint-active:
+        required: false
+        default: true
+        type: boolean
+      python-pytest-active:
+        required: false
+        default: true
+        type: boolean
+      common-sonarqube-active:
+        required: false
+        default: true
+        type: boolean
+      common-dtrack-active:
+        required: false
+        default: false
+        type: boolean
+
+        
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      SONAR_HOST_URL:
+        required: false
+      GITLEAKS_LICENSE:
+        required: false
+
+jobs:
+  python-ci-pylint:
+    name: Python CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/python-ci-pylint.yaml@master
+    with:
+      python-version: ${{ inputs.python-version }}
+      active: ${{ inputs.python-pylint-active }}
+
+  python-ci-pytest:
+    name: Python CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/python-ci-pytest.yaml@master
+    with:
+      python-version: ${{ inputs.python-version }}
+      active: ${{ inputs.python-pytest-active }}
+
+  common-ci-sonarqube:
+    name: Python CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/common-ci-sonarqube.yaml@master
+    with:
+      active: ${{ inputs.common-sonarqube-active }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  common-ci-dtrack:
+    name: Python CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/common-ci-dtrack.yaml@master
+    with:
+      active: ${{ inputs.common-dtrack-active }}
+
+  common-gitleaks:
+    name: Python CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/common-ci-gitleaks.yaml@master
+    with:
+       active: true  
+    secrets:
+      GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE}}
+
+  common-ci-bandit:
+    name: Python CI
+    uses: pulsus-mobi/pulsus-github-actions/.github/workflows/common-ci-bandit.yaml@master
+    with:
+      active: true
+
+      
+

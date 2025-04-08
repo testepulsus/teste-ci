@@ -1,0 +1,57 @@
+name: Traceroute
+
+on:
+  workflow_call:
+    inputs:
+      ruby-version:
+        required: false
+        default: "2.6.2"
+        type: string
+      node-version:
+        required: false
+        default: "9.8.0"
+        type: string
+      so-version:
+        required: false
+        default: "ubuntu-20.04"
+        type: string
+      active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  ruby-ci-traceroute:
+    if: ${{ inputs.active == true }}
+    name: Traceroute
+    runs-on: ${{ inputs.so-version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install container dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get install -y gcc
+        
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node-version }}
+          
+      - name: Install Yarn
+        run: npm install --global yarn
+        
+      - name: Install Node.js dependencies
+        run: yarn install --check-files
+  
+      - name: Run Traceroute
+        id: traceroute
+        run: |
+          COVERBAND_DISABLE_AUTO_START=true FAIL_ON_ERROR=1 RAILS_ENV=development bundle exec rails traceroute

@@ -1,0 +1,39 @@
+name: PyLint
+run-name: PyLint
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+      active:
+        required: false
+        default: true
+        type: boolean
+
+
+jobs:
+  python-ci-pylint:
+    if: ${{ inputs.active == true }}
+    runs-on: ubuntu-latest
+    name: PyLint
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install dependencies
+        run: |
+            pip install --no-cache-dir --upgrade -r requirements.txt
+            pip install --no-cache-dir pylint
+
+      - name: Run PyLint
+        run: |
+          find . -name "*.py" ! -path "./venv/*" ! -path "./.venv/*" | xargs pylint --disable=C0114,C0115,C0116,R0917,R0801,R0911,E1102 --max-line-length=200 
+        shell: bash

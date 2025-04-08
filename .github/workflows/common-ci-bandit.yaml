@@ -1,0 +1,59 @@
+name: Bandit
+on:
+  workflow_call:
+    inputs:
+      active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  bandit:
+    name: Bandit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 
+
+      - name: Set up Python
+        uses: actions/setup-python@v5 
+        with:
+          python-version: '3.x'
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit
+        id: bandit
+        run: |
+          bandit -r . -f json -o bandit-report.json
+        continue-on-error: true
+
+      - name: Filter High Severity Issues
+        id: filter_high
+        run: |
+          jq '[.results[] | select(.issue_severity == "HIGH")]' bandit-report.json > high-severity.json
+          count=$(jq length high-severity.json)
+          echo "high_issues_count=$count" >> $GITHUB_ENV
+
+      - name: Generate Bandit Markdown Summary
+        run: |
+          echo "## 🔴 Bandit Scan Results (All Severities) 🔴" >> $GITHUB_STEP_SUMMARY
+          echo "| Filename | Issue | Severity | Line | View in Code |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- | --- | --- | --- |" >> $GITHUB_STEP_SUMMARY
+          cat bandit-report.json | jq -r '.results[] | "| \(.filename) | \(.issue_text) | \(.issue_severity) | \(.line_number) | [View in Code](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/\(.filename)#L\(.line_number)) |"' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report.json
+          path: bandit-report.json
+
+      - name: Fail on High Severity Issues
+        if: env.high_issues_count != '0'
+        run: |
+          echo "❌ High severity issues detected: ${{ env.high_issues_count }}."
+          echo "Details of high severity issues:"
+          jq -r '.[] | "- Severity: HIGH, File: \(.filename), Line: \(.line_number), Issue: \(.issue_text)"' high-severity.json
+          exit 1

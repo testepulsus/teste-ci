@@ -1,0 +1,129 @@
+name: Rubocop
+
+on:
+  workflow_call:
+    inputs:
+      ruby-version:
+        required: false
+        default: "2.6.2"
+        type: string
+      node-version:
+        required: false
+        default: "9.8.0"
+        type: string
+      so-version:
+        required: false
+        default: "ubuntu-20.04"
+        type: string
+      active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  ruby-ci-rubocop:
+    if: ${{ inputs.active == true }}
+    name: Rubocop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 2.6.2
+          bundler-cache: true
+      - name: Run RuboCop and gather stats
+        id: rubocop
+        run: |
+          bundle exec rubocop --format json > rubocop_output.json || true
+          
+          # Captura as informações de ofensas
+          total_offenses=$(jq '.summary.offense_count' rubocop_output.json)
+          refactor_offenses=$(jq '[.files[].offenses[] | select(.severity == "refactor")] | length' rubocop_output.json)
+          convention_offenses=$(jq '[.files[].offenses[] | select(.severity == "convention")] | length' rubocop_output.json)
+          warning_offenses=$(jq '[.files[].offenses[] | select(.severity == "warning")] | length' rubocop_output.json)
+          error_offenses=$(jq '[.files[].offenses[] | select(.severity == "error")] | length' rubocop_output.json)
+          fatal_offenses=$(jq '[.files[].offenses[] | select(.severity == "fatal")] | length' rubocop_output.json)
+
+          # Calcula percentuais
+          if [ $total_offenses -gt 0 ]; then
+            total_refactor=$((refactor_offenses * 100 / total_offenses))
+            total_convention=$((convention_offenses * 100 / total_offenses))
+            total_warning=$((warning_offenses * 100 / total_offenses))
+            total_error=$((error_offenses * 100 / total_offenses))
+            total_fatal=$((fatal_offenses * 100 / total_offenses))
+          else
+            total_refactor=0
+            total_convention=0
+            total_warning=0
+            total_error=0
+            total_fatal=0
+          fi
+
+          # Definir variáveis de ambiente para as próximas etapas
+          echo "TOTAL_OFFENSES=$total_offenses" >> $GITHUB_ENV
+          echo "REFACTOR_OFFENSES=$refactor_offenses" >> $GITHUB_ENV
+          echo "TOTAL_REFACTOR=$total_refactor" >> $GITHUB_ENV
+          echo "CONVENTION_OFFENSES=$convention_offenses" >> $GITHUB_ENV
+          echo "TOTAL_CONVENTION=$total_convention" >> $GITHUB_ENV
+          echo "WARNING_OFFENSES=$warning_offenses" >> $GITHUB_ENV
+          echo "TOTAL_WARNING=$total_warning" >> $GITHUB_ENV
+          echo "ERROR_OFFENSES=$error_offenses" >> $GITHUB_ENV
+          echo "TOTAL_ERROR=$total_error" >> $GITHUB_ENV
+          echo "FATAL_OFFENSES=$fatal_offenses" >> $GITHUB_ENV
+          echo "TOTAL_FATAL=$total_fatal" >> $GITHUB_ENV
+
+      - name: Display stats and check failure
+        run: |
+          echo "Total Offenses: $TOTAL_OFFENSES"
+          echo "Refactor Offenses: $REFACTOR_OFFENSES - Percent: $TOTAL_REFACTOR%"
+          echo "Convention Offenses: $CONVENTION_OFFENSES - Percent: $TOTAL_CONVENTION%"
+          echo "Warning Offenses: $WARNING_OFFENSES - Percent: $TOTAL_WARNING%" 
+          echo "Error Offenses: $ERROR_OFFENSES - Percent: $TOTAL_ERROR%"
+          echo "Fatal Offenses: $FATAL_OFFENSES - Percent: $TOTAL_FATAL%"
+      
+      - name: Check errors
+        run: |
+          # Verifica se há erros e falha o build caso haja
+          if [ $ERROR_OFFENSES -gt 0 ] || [ $FATAL_OFFENSES -gt 0 ]; then
+            echo "RuboCop found errors or fatal issues! Failing the build."
+            exit 1
+          fi
+
+      - name: Generate RuboCop Markdown Report
+        run: |
+          echo "## 🧐 RuboCop Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Severity | Count | Percentage |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Refactor | $REFACTOR_OFFENSES | $TOTAL_REFACTOR% |" >> $GITHUB_STEP_SUMMARY
+          echo "| Convention | $CONVENTION_OFFENSES | $TOTAL_CONVENTION% |" >> $GITHUB_STEP_SUMMARY
+          echo "| Warning | $WARNING_OFFENSES | $TOTAL_WARNING% |" >> $GITHUB_STEP_SUMMARY
+          echo "| Error | $ERROR_OFFENSES | $TOTAL_ERROR% |" >> $GITHUB_STEP_SUMMARY
+          echo "| Fatal | $FATAL_OFFENSES | $TOTAL_FATAL% |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Se houver ofensas (exceto Convention), listar os detalhes
+          if [ $WARNING_OFFENSES -gt 0 ] || [ $ERROR_OFFENSES -gt 0 ] || [ $FATAL_OFFENSES -gt 0 ]; then
+            echo "### 🔍 Offenses Details (Warning, Error, Fatal only)" >> $GITHUB_STEP_SUMMARY
+            echo "| File | Line | Severity | Message |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|------|----------|---------|" >> $GITHUB_STEP_SUMMARY
+            jq -r '
+              .files[] | 
+              select(.offenses | length > 0) | 
+              .path as $file | 
+              .offenses[] | 
+              select(.severity != "convention") | 
+              "| \($file) | Line \(.location.start_line) | \(.severity) | \(.message) |"
+            ' rubocop_output.json >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Verifica se há erros ou falhas para destacar no resumo
+          if [ $ERROR_OFFENSES -gt 0 ] || [ $FATAL_OFFENSES -gt 0 ]; then
+            echo "❌ **RuboCop found errors or fatal issues!** ❌" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **No critical errors detected!** ✅" >> $GITHUB_STEP_SUMMARY
+          fi
+
+

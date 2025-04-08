@@ -1,0 +1,39 @@
+name: Brakeman
+
+on:
+  workflow_call:
+    inputs:
+      ruby-version:
+        required: false
+        default: "2.6.2"
+        type: string
+      node-version:
+        required: false
+        default: "9.8.0"
+        type: string
+      so-version:
+        required: false
+        default: "ubuntu-20.04"
+        type: string
+      active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  brakeman:
+    if: ${{ inputs.active == true }}
+    name: Brakeman
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 2.6.2
+          bundler-cache: true
+      - name: Run Brakeman
+        id: brakeman
+        run: |
+          bundle exec brakeman -q --no-exit-on-warn --no-exit-on-error

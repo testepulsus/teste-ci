@@ -1,0 +1,37 @@
+name: Dependency Track
+run-name: Dependency Track
+
+on:
+  workflow_call:
+    inputs:
+      active:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  dtrack:
+    if: ${{ inputs.active == true }}
+    runs-on: ubuntu-latest
+    name: Dependency Track
+    steps:
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download Syft
+        id: download-syft
+        uses: anchore/sbom-action/download-syft@v0
+      
+      - name: Generate SBOM
+        run: ${{ steps.download-syft.outputs.cmd }} dir:./ -o cyclonedx-xml > bom.xml
+      
+      - name: Upload SBOM
+        run: |
+          curl -X "POST" "https://${{ secrets.SECRET_OWASP_DT_HOST }}/api/v1/bom" \
+            -H 'Content-Type: multipart/form-data' \
+            -H "X-API-Key: ${{ secrets.SECRET_OWASP_DT_KEY }}" \
+            -F "autoCreate=true" \
+            -F "projectName=${{ github.event.repository.name }}" \
+            -F "projectVersion=${{ github.head_ref }}" \
+            -F "bom=@bom.xml"
